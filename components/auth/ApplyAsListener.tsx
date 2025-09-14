@@ -1,7 +1,8 @@
 
 
+
 import React, { useState, useEffect, useRef } from 'react';
-import { db, serverTimestamp, functions } from '../../utils/firebase';
+import { functions } from '../../utils/firebase';
 
 // Icon for privacy note
 const LockIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -135,7 +136,17 @@ const ApplyAsListener: React.FC = () => {
           setApplied(true);
         } catch (err: any) {
           console.error("Application submission error:", err);
-          setError(err.message || "आवेदन जमा करने में विफल। कृपया अपनी इंटरनेट जाँच करें और पुनः प्रयास करें।");
+          // Provide more specific feedback based on potential function errors
+          let errorMessage = "आवेदन जमा करने में विफल। कृपया अपनी इंटरनेट जाँच करें और पुनः प्रयास करें।";
+          if (err.code === 'functions/already-exists') {
+              errorMessage = "इस फ़ोन नंबर से पहले ही एक आवेदन मौजूद है या कोई लिस्नर रजिस्टर्ड है।";
+          } else if (err.code === 'functions/invalid-argument') {
+              errorMessage = "कृपया सुनिश्चित करें कि सभी जानकारी सही है।";
+          } else if (err.message) {
+              // Use the message from the function if it's provided
+              errorMessage = err.message;
+          }
+          setError(errorMessage);
         } finally {
           setLoading(false);
         }
