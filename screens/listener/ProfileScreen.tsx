@@ -184,7 +184,7 @@ const ProfileScreen: React.FC = () => {
         </div>
 
         <Accordion 
-            title="कमाई की संरचना (Earning Structure)"
+            title="कमाई कैसे होगी? (How You Earn)"
             isOpen={openAccordion === 'earning'}
             onToggle={() => handleAccordionToggle('earning')}
         >
