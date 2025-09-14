@@ -1,8 +1,6 @@
 
-
-
 import React, { useState, useEffect, useRef } from 'react';
-import { functions } from '../../utils/firebase';
+import { db, serverTimestamp } from '../../utils/firebase';
 
 // Icon for privacy note
 const LockIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -131,24 +129,36 @@ const ApplyAsListener: React.FC = () => {
         setError('');
 
         try {
-          const submitListenerApplication = functions.httpsCallable('submitListenerApplication');
-          await submitListenerApplication(formData);
-          setApplied(true);
+            // A client-side check to prevent obvious duplicates before writing to the database.
+            const phone = formData.phone.trim();
+            const applicationsQuery = db.collection('applications').where('phone', '==', phone);
+            const listenersQuery = db.collection('listeners').where('phone', '==', phone);
+
+            const [applicationSnapshot, listenerSnapshot] = await Promise.all([
+                applicationsQuery.get(),
+                listenersQuery.get()
+            ]);
+
+            if (!applicationSnapshot.empty || !listenerSnapshot.empty) {
+                setError("इस फ़ोन नंबर से पहले ही एक आवेदन मौजूद है या कोई लिस्नर रजिस्टर्ड है।");
+                setLoading(false);
+                return;
+            }
+
+            // Bypassing the cloud function and writing directly to Firestore.
+            // This requires Firestore rules to allow unauthenticated creates on the 'applications' collection.
+            await db.collection('applications').add({
+                ...formData,
+                phone: phone, // ensure no whitespace
+                status: 'pending',
+                createdAt: serverTimestamp(),
+            });
+            setApplied(true);
         } catch (err: any) {
-          console.error("Application submission error:", err);
-          // Provide more specific feedback based on potential function errors
-          let errorMessage = "आवेदन जमा करने में विफल। कृपया अपनी इंटरनेट जाँच करें और पुनः प्रयास करें।";
-          if (err.code === 'functions/already-exists') {
-              errorMessage = "इस फ़ोन नंबर से पहले ही एक आवेदन मौजूद है या कोई लिस्नर रजिस्टर्ड है।";
-          } else if (err.code === 'functions/invalid-argument') {
-              errorMessage = "कृपया सुनिश्चित करें कि सभी जानकारी सही है।";
-          } else if (err.message) {
-              // Use the message from the function if it's provided
-              errorMessage = err.message;
-          }
-          setError(errorMessage);
+            console.error("Application submission error:", err);
+            setError("आवेदन जमा करने में विफल। कृपया अपनी इंटरनेट जाँच करें और पुनः प्रयास करें।");
         } finally {
-          setLoading(false);
+            setLoading(false);
         }
     }
   };
