@@ -1,7 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { db, functions, auth } from '../../utils/firebase';
+import { db, functions, auth, rtdb } from '../../utils/firebase';
 import type { ListenerProfile, Application } from '../../types';
 import { Link, useNavigate } from 'react-router-dom';
+
+// --- Reusable Notification Banner ---
+const NotificationBanner: React.FC<{ message: string; type: 'error' | 'success'; onDismiss: () => void; }> = ({ message, type, onDismiss }) => {
+    const baseClasses = "p-4 mb-4 rounded-lg flex items-center justify-between shadow-md animate-fade-in";
+    const colorClasses = type === 'error'
+        ? "bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-200"
+        : "bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200";
+
+    return (
+        <div className={`${baseClasses} ${colorClasses}`} role="alert">
+            <p className="font-medium">{message}</p>
+            <button onClick={onDismiss} aria-label="Dismiss" className="p-1 -mr-2 rounded-full hover:bg-black/10 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+            </button>
+        </div>
+    );
+};
+
 
 // --- Icon Components ---
 const RupeeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 8h6m-5 4h4m5 4a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
@@ -13,6 +31,7 @@ const NewApplicationIcon = () => <svg xmlns="http://www.w3.org/2000/svg" classNa
 const UserCheckIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
 const PhoneIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>;
 const ChatIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>;
+const OnlineIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-emerald-500" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" /></svg>;
 
 
 const StatCard: React.FC<{ title: string; value: string | number; icon: React.ReactNode; loading: boolean; }> = ({ title, value, icon, loading }) => (
@@ -58,6 +77,8 @@ const AdminDashboardScreen: React.FC = () => {
   const [onboardingListeners, setOnboardingListeners] = useState<ListenerProfile[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [notification, setNotification] = useState<{message: string, type: 'error' | 'success'} | null>(null);
+  const [onlineCount, setOnlineCount] = useState(0);
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -66,9 +87,25 @@ const AdminDashboardScreen: React.FC = () => {
         navigate('/login'); 
     } catch (error) {
         console.error('Error signing out: ', error);
-        alert('Could not log out. Please try again.');
+        setNotification({ message: 'Could not log out. Please try again.', type: 'error' });
     }
   };
+
+  useEffect(() => {
+    // Real-time listener for online users
+    const statusRef = rtdb.ref('status');
+    statusRef.on('value', (snapshot) => {
+        const statuses = snapshot.val();
+        if (statuses) {
+            const count = Object.values(statuses).filter((s: any) => s.isOnline).length;
+            setOnlineCount(count);
+        } else {
+            setOnlineCount(0);
+        }
+    });
+
+    return () => statusRef.off();
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -80,6 +117,7 @@ const AdminDashboardScreen: React.FC = () => {
             setStats(result.data);
         } catch (error) {
             console.error("Error fetching dashboard stats:", error);
+            setNotification({ message: 'Failed to load dashboard statistics.', type: 'error' });
         }
     };
     fetchAllData();
@@ -88,11 +126,15 @@ const AdminDashboardScreen: React.FC = () => {
       .onSnapshot(snapshot => {
         setApplications(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Application)));
         setLoading(false); // Stop loading after first fetch
+      }, (err) => {
+        setNotification({ message: 'Failed to load new applications.', type: 'error' });
       });
       
     const unsubOnboarding = db.collection('listeners').where('status', '==', 'onboarding_required')
       .onSnapshot(snapshot => {
         setOnboardingListeners(snapshot.docs.map(doc => doc.data() as ListenerProfile));
+      }, (err) => {
+        setNotification({ message: 'Failed to load onboarding listeners.', type: 'error' });
       });
 
     return () => {
@@ -112,10 +154,10 @@ const AdminDashboardScreen: React.FC = () => {
     try {
         const callable = functions.httpsCallable(functionName);
         await callable({ applicationId });
-        alert(`Application successfully ${action}d.`);
+        setNotification({ message: `Application successfully ${action}d.`, type: 'success' });
     } catch (error: any) {
         console.error(`Error ${action}ing application:`, error);
-        alert(`Failed to ${action} application: ${error.message}`);
+        setNotification({ message: `Failed to ${action} application: ${error.message}`, type: 'error' });
     }
   };
 
@@ -135,16 +177,18 @@ const AdminDashboardScreen: React.FC = () => {
             </button>
         </header>
         
+        {notification && <NotificationBanner message={notification.message} type={notification.type} onDismiss={() => setNotification(null)} />}
+        
         <PayoutNotice />
 
         {/* Main Dashboard Overview */}
         <div>
             <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200 mb-3">Main Dashboard Overview</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <StatCard title="Listeners Online" value={onlineCount} icon={<OnlineIcon />} loading={false} />
+                <StatCard title="Active Listeners" value={stats?.activeListeners ?? '...'} icon={<UserCheckIcon />} loading={!stats} />
                 <StatCard title="New Applications" value={applications.length} icon={<NewApplicationIcon />} loading={loading} />
                 <StatCard title="Pending Onboarding" value={onboardingListeners.length} icon={<UserClockIcon />} loading={loading} />
-                <StatCard title="Active Listeners" value={stats?.activeListeners ?? '...'} icon={<UserCheckIcon />} loading={!stats} />
-                <StatCard title="Total Revenue" value={`₹${stats?.totalRevenue ?? '...'}`} icon={<RupeeIcon />} loading={!stats} />
             </div>
         </div>
         
@@ -160,6 +204,17 @@ const AdminDashboardScreen: React.FC = () => {
             </div>
         </div>
         
+        {/* Advanced Analytics Grid */}
+        <div>
+            <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200 mb-3">Advanced Analytics</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <StatCard title="Total Revenue" value={`₹${stats?.totalRevenue ?? '...'}`} icon={<RupeeIcon />} loading={!stats} />
+                <StatCard title="Top Earner (Week)" value={`...`} icon={<RupeeIcon />} loading={!stats} />
+                <StatCard title="Most Active (Week)" value={`...`} icon={<UserCheckIcon />} loading={!stats} />
+                <StatCard title="Peak Call Time" value={`...`} icon={<PhoneIcon />} loading={!stats} />
+            </div>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* New Applications Table */}
             <div>

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { auth, db } from '../../utils/firebase';
 import { useNavigate } from 'react-router-dom';
@@ -6,6 +5,23 @@ import { GuidelinesContent } from '../../components/profile/ListenerGuidelines';
 import { useListener } from '../../context/ListenerContext';
 import { TermsContent } from './TermsScreen';
 import { PrivacyPolicyContent } from './PrivacyPolicyScreen';
+
+// --- Reusable Notification Banner ---
+const NotificationBanner: React.FC<{ message: string; type: 'error' | 'success'; onDismiss: () => void; }> = ({ message, type, onDismiss }) => {
+    const baseClasses = "p-4 mb-3 rounded-lg flex items-center justify-between shadow-md animate-fade-in";
+    const colorClasses = type === 'error'
+        ? "bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-200"
+        : "bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200";
+
+    return (
+        <div className={`${baseClasses} ${colorClasses}`} role="alert">
+            <p className="font-medium">{message}</p>
+            <button onClick={onDismiss} aria-label="Dismiss" className="p-1 -mr-2 rounded-full hover:bg-black/10 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+            </button>
+        </div>
+    );
+};
 
 
 // --- Reusable Accordion Component ---
@@ -39,6 +55,7 @@ const Accordion: React.FC<{ title: string; children: React.ReactNode; isOpen: bo
 const ToggleSwitch: React.FC<{ checked: boolean; onChange: (checked: boolean) => void; disabled?: boolean; }> = ({ checked, onChange, disabled }) => (
     <button
         type="button"
+        role="switch"
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 ${checked ? 'bg-cyan-600' : 'bg-slate-400 dark:bg-slate-600'} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
@@ -86,6 +103,7 @@ const ProfileScreen: React.FC = () => {
     const { profile, loading } = useListener();
     const isInitialLoad = useRef(true);
     const [openAccordion, setOpenAccordion] = useState<string | null>(null);
+    const [notification, setNotification] = useState<{message: string, type: 'error' | 'success'} | null>(null);
 
     const [localSettings, setLocalSettings] = useState({
         calls: true,
@@ -123,16 +141,18 @@ const ProfileScreen: React.FC = () => {
             await listenerRef.update({
                 [`notificationSettings.${key}`]: value
             });
+            setNotification({ message: 'Settings saved successfully!', type: 'success'});
         } catch (error) {
             console.error(`Failed to update ${key} notification setting:`, error);
-            setLocalSettings(prev => ({ ...prev, [key]: !value }));
-            alert(`Could not save setting for ${key}. Please try again.`);
+            setLocalSettings(prev => ({ ...prev, [key]: !value })); // Revert on error
+            setNotification({ message: `Could not save setting for ${key}. Please try again.`, type: 'error'});
         }
     };
 
 
   return (
     <div className="p-4 space-y-3">
+        {notification && <NotificationBanner message={notification.message} type={notification.type} onDismiss={() => setNotification(null)} />}
         <div className="bg-white dark:bg-gradient-to-br dark:from-slate-800 dark:to-slate-700/90 p-4 rounded-xl shadow-sm">
           <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-4">

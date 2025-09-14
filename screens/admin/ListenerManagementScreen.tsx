@@ -1,10 +1,27 @@
 import React, { useState, useEffect, useMemo } from 'react';
-// FIX: The import for `Link` is correct for react-router-dom v5. The error was a cascading issue from other files using v6 syntax.
 import { Link } from 'react-router-dom';
 import { db } from '../../utils/firebase';
 import type { ListenerProfile, ListenerAccountStatus } from '../../types';
 import ListenerRow from '../../components/admin/ListenerRow';
 import type firebase from 'firebase/compat/app';
+
+// --- Reusable Notification Banner ---
+const NotificationBanner: React.FC<{ message: string; type: 'error' | 'success'; onDismiss: () => void; }> = ({ message, type, onDismiss }) => {
+    const baseClasses = "p-4 mb-4 rounded-lg flex items-center justify-between shadow-md animate-fade-in";
+    const colorClasses = type === 'error'
+        ? "bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-200"
+        : "bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200";
+
+    return (
+        <div className={`${baseClasses} ${colorClasses}`} role="alert">
+            <p className="font-medium">{message}</p>
+            <button onClick={onDismiss} aria-label="Dismiss" className="p-1 -mr-2 rounded-full hover:bg-black/10 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+            </button>
+        </div>
+    );
+};
+
 
 type StatusFilter = 'all' | ListenerAccountStatus;
 
@@ -16,12 +33,12 @@ const ListenerManagementScreen: React.FC = () => {
     const [loadingMore, setLoadingMore] = useState(false);
     const [lastDoc, setLastDoc] = useState<firebase.firestore.QueryDocumentSnapshot | null>(null);
     const [hasMore, setHasMore] = useState(true);
-    
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
     const [searchTerm, setSearchTerm] = useState('');
+    const [notification, setNotification] = useState<{message: string, type: 'error' | 'success'} | null>(null);
+    const [updatingUids, setUpdatingUids] = useState<string[]>([]);
 
     useEffect(() => {
-        // Using get() for pagination control instead of onSnapshot
         const fetchInitialListeners = async () => {
             setLoading(true);
             try {
@@ -40,6 +57,7 @@ const ListenerManagementScreen: React.FC = () => {
                 setHasMore(snapshot.docs.length === PAGE_SIZE);
             } catch (error) {
                 console.error("Error fetching listeners:", error);
+                setNotification({ message: 'Failed to fetch initial listeners.', type: 'error' });
             } finally {
                 setLoading(false);
             }
@@ -68,14 +86,32 @@ const ListenerManagementScreen: React.FC = () => {
             setHasMore(snapshot.docs.length === PAGE_SIZE);
         } catch (error) {
             console.error("Error fetching more listeners:", error);
+             setNotification({ message: 'Failed to load more listeners.', type: 'error' });
         } finally {
             setLoadingMore(false);
         }
     };
 
+    const handleStatusChange = async (listener: ListenerProfile, newStatus: ListenerAccountStatus) => {
+        if (listener.status === newStatus) return;
+        if (!window.confirm(`Are you sure you want to change status to "${newStatus}" for ${listener.displayName}?`)) return;
+
+        setUpdatingUids(prev => [...prev, listener.uid]);
+        try {
+            await db.collection('listeners').doc(listener.uid).update({ status: newStatus });
+            // Update local state for immediate feedback
+            setListeners(prev => prev.map(l => l.uid === listener.uid ? { ...l, status: newStatus } : l));
+            setNotification({ message: `Status updated for ${listener.displayName}.`, type: 'success'});
+        } catch (error) {
+            console.error("Failed to update status:", error);
+            setNotification({ message: `Error updating status for ${listener.displayName}.`, type: 'error'});
+        } finally {
+            setUpdatingUids(prev => prev.filter(uid => uid !== listener.uid));
+        }
+    };
+
 
     const filteredListeners = useMemo(() => {
-        // Filtering is now done on the currently loaded listeners
         return listeners.filter(listener => {
             const matchesStatus = statusFilter === 'all' || listener.status === statusFilter;
             const matchesSearch = searchTerm === '' ||
@@ -108,6 +144,8 @@ const ListenerManagementScreen: React.FC = () => {
                 </div>
             </header>
             
+            {notification && <NotificationBanner message={notification.message} type={notification.type} onDismiss={() => setNotification(null)} />}
+
             {/* Filters and Search */}
             <div className="flex flex-col sm:flex-row gap-4">
                 <select 
@@ -155,7 +193,7 @@ const ListenerManagementScreen: React.FC = () => {
                                     </tr>
                                 ))
                             ) : filteredListeners.length > 0 ? (
-                                filteredListeners.map(listener => <ListenerRow key={listener.uid} listener={listener} />)
+                                filteredListeners.map(listener => <ListenerRow key={listener.uid} listener={listener} onStatusChange={(newStatus) => handleStatusChange(listener, newStatus)} isUpdating={updatingUids.includes(listener.uid)} />)
                             ) : (
                                 <tr>
                                     <td colSpan={6} className="text-center py-10">

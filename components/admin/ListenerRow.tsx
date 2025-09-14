@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
-import { db } from '../../utils/firebase';
+import React from 'react';
 import type { ListenerProfile, ListenerAccountStatus } from '../../types';
 
 interface ListenerRowProps {
   listener: ListenerProfile;
+  onStatusChange: (newStatus: ListenerAccountStatus) => void;
+  isUpdating: boolean;
 }
 
 const StatusBadge: React.FC<{ status: ListenerAccountStatus }> = ({ status }) => {
@@ -31,25 +32,7 @@ const StatusBadge: React.FC<{ status: ListenerAccountStatus }> = ({ status }) =>
 };
 
 
-const ListenerRow: React.FC<ListenerRowProps> = ({ listener }) => {
-    const [isUpdating, setIsUpdating] = useState(false);
-
-    const handleStatusChange = async (newStatus: ListenerAccountStatus) => {
-        if (listener.status === newStatus) return;
-        if (!window.confirm(`Are you sure you want to change status to "${newStatus}" for ${listener.displayName}?`)) return;
-
-        setIsUpdating(true);
-        try {
-            await db.collection('listeners').doc(listener.uid).update({ status: newStatus });
-            // The change will be reflected automatically by the onSnapshot listener on the parent component.
-        } catch (error) {
-            console.error("Failed to update status:", error);
-            alert("Error updating listener status.");
-        } finally {
-            setIsUpdating(false);
-        }
-    };
-
+const ListenerRow: React.FC<ListenerRowProps> = ({ listener, onStatusChange, isUpdating }) => {
     return (
         <tr className={`bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors ${isUpdating ? 'opacity-50' : ''}`}>
             <th scope="row" className="px-6 py-4 font-medium text-slate-900 dark:text-white whitespace-nowrap">
@@ -74,7 +57,7 @@ const ListenerRow: React.FC<ListenerRowProps> = ({ listener }) => {
             <td className="px-6 py-4 text-right">
                  <select
                     value={listener.status}
-                    onChange={(e) => handleStatusChange(e.target.value as ListenerAccountStatus)}
+                    onChange={(e) => onStatusChange(e.target.value as ListenerAccountStatus)}
                     disabled={isUpdating}
                     className="bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md text-sm p-2 focus:ring-cyan-500 focus:border-cyan-500 disabled:opacity-70"
                 >

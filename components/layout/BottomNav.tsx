@@ -24,7 +24,7 @@ const NavItem: React.FC<{ path: string; label: string; icon: (active: boolean) =
         : 'text-xs';
 
     return (
-        <Link to={path} className="flex-1 flex flex-col justify-center items-center h-full focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 rounded-lg group">
+        <Link to={path} aria-label={label} className="flex-1 flex flex-col justify-center items-center h-full focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 rounded-lg group">
             <div className={`relative px-4 py-1 rounded-full transition-colors duration-300 ${isActive ? 'bg-emerald-100 dark:bg-emerald-500/20' : 'bg-transparent'}`}>
                 <div className={`transition-transform duration-200 ease-in-out ${isActive ? '-translate-y-0.5' : ''} ${textColor} group-hover:text-slate-800 dark:group-hover:text-slate-200`}>
                      {icon(isActive)}
